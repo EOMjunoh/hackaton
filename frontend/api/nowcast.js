@@ -39,12 +39,15 @@ module.exports = async (req, res) => {
       return;
     }
 
+    // 이상치 방어: 기온·강수 실측값이 물리적으로 말이 안 되는 범위면 버린다(관측 오류·파싱
+    // 오류 대비 — 대한민국 기상 관측사상 극값을 넉넉히 벗어난 값만 걸러내는 상한/하한).
+    const inRange = (v, lo, hi) => !Number.isNaN(v) && v >= lo && v <= hi;
     const items = data.response.body?.items?.item || [];
     let temp = null, rain1h = null, ptyCode = null;
     for (const it of items) {
       const v = parseFloat(it.obsrValue);
-      if (it.category === 'T1H' && !Number.isNaN(v)) temp = v;
-      else if (it.category === 'RN1' && !Number.isNaN(v)) rain1h = v; // mm, "강수없음"이면 API가 0으로 줌
+      if (it.category === 'T1H' && inRange(v, -45, 45)) temp = v;
+      else if (it.category === 'RN1' && inRange(v, 0, 300)) rain1h = v; // mm, "강수없음"이면 API가 0으로 줌
       else if (it.category === 'PTY') ptyCode = it.obsrValue;
     }
     if (temp === null) {

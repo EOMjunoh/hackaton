@@ -38,7 +38,15 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const items = parseItems(xml).filter((i) => !Number.isNaN(i.ph) && !Number.isNaN(i.ec) && !Number.isNaN(i.om));
+    // 이상치 방어: NaN뿐 아니라 화학적으로 불가능한 값(파싱 오류·공공데이터 입력 오류로
+    // 간혹 섞여 들어옴)도 평균에서 제외한다. 범위는 임의 추정이 아니라 물리·화학적 정의
+    // 그 자체다 — pH는 정의상 0~14, EC·유기물·유효인산은 국내 농경지에서 절대 나올 수
+    // 없는 극단값(음수, 수만 단위)만 걸러내는 넉넉한 상한이라 정상적인 실측값을 실수로
+    // 버리지 않는다.
+    const PLAUSIBLE = { ph: [0, 14], ec: [0, 20], om: [0, 100], avp: [0, 5000] };
+    const isPlausible = (i) => Object.entries(PLAUSIBLE).every(([k, [lo, hi]]) =>
+      !Number.isNaN(i[k]) && i[k] >= lo && i[k] <= hi);
+    const items = parseItems(xml).filter(isPlausible);
     if (!items.length) {
       res.status(200).json({ items: 0 });
       return;

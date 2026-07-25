@@ -8,6 +8,13 @@ const SUPABASE_URL = 'https://ahklaovymayuqfalwggg.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_wXVlSyyz209dANBxjr7gUw_lMKhw1CZ';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ── PWA: 서비스 워커 등록 (앱 셸만 캐시 — /api/*는 절대 캐시 안 함, sw.js 참고) ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW 등록 실패:', e.message));
+  });
+}
+
 // ══════════════════════════════════════════════════════
 // 정적 데이터 + 스코어링 엔진
 // → frontend/data.js, frontend/scoring.js 로 분리됨 (index.html에서

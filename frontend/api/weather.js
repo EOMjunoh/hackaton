@@ -41,14 +41,18 @@ module.exports = async (req, res) => {
       return;
     }
 
+    // 이상치 방어: 파싱 오류나 API 응답 이상으로 물리적으로 불가능한 값(대한민국 기상
+    // 관측사상 극값을 넉넉히 벗어난 기온, 0~100을 벗어난 확률)이 섞여 있으면 버린다.
+    const inRange = (v, lo, hi) => !Number.isNaN(v) && v >= lo && v <= hi;
+
     const items = data.response.body?.items?.item || [];
     const byDate = {};
     for (const it of items) {
       const d = byDate[it.fcstDate] || (byDate[it.fcstDate] = { mx: null, mn: null, tmpSamples: [], popSamples: [], pcpSamples: [] });
-      if (it.category === 'TMX') { const v = parseFloat(it.fcstValue); if (!Number.isNaN(v)) d.mx = v; }
-      else if (it.category === 'TMN') { const v = parseFloat(it.fcstValue); if (!Number.isNaN(v)) d.mn = v; }
-      else if (it.category === 'TMP') { const v = parseFloat(it.fcstValue); if (!Number.isNaN(v)) d.tmpSamples.push(v); }
-      else if (it.category === 'POP') { const v = parseFloat(it.fcstValue); if (!Number.isNaN(v)) d.popSamples.push(v); }
+      if (it.category === 'TMX') { const v = parseFloat(it.fcstValue); if (inRange(v, -45, 45)) d.mx = v; }
+      else if (it.category === 'TMN') { const v = parseFloat(it.fcstValue); if (inRange(v, -45, 45)) d.mn = v; }
+      else if (it.category === 'TMP') { const v = parseFloat(it.fcstValue); if (inRange(v, -45, 45)) d.tmpSamples.push(v); }
+      else if (it.category === 'POP') { const v = parseFloat(it.fcstValue); if (inRange(v, 0, 100)) d.popSamples.push(v); }
       else if (it.category === 'PCP') { d.pcpSamples.push(parsePcpMm(it.fcstValue)); }
     }
 
