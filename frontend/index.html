@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FarmFit — 스마트팜 작물 적합도 분석</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --teal:#1D9E75; --teal-d:#0F6E56; --teal-s:#5DCAA5; --teal-p:#E1F5EE;
+    --green:#2D6A4F; --green-d:#1B4332; --green-s:#52B788; --green-p:#D8F3DC;
+    --ink:#1a2e28; --sub:#5a6b64; --mute:#9aa8a2;
+    --line:#e2ebe7; --sf:#ffffff; --sf1:#f5faf8;
+    --amber:#F4A261; --red:#E63946; --blue:#2a78d6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,'Noto Sans KR',sans-serif;background:#e8f0eb;color:var(--ink);-webkit-font-smoothing:antialiased}
+  .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--sf1);position:relative;overflow-x:hidden}
+
+  /* ── PAGES ── */
+  .page{display:none;position:relative;z-index:1;min-height:100vh;flex-direction:column}
+  .page.on{display:flex;animation:si .3s ease}
+  @keyframes si{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+
+  /* ── HERO BG ── */
+  .hbg{position:absolute;top:0;left:0;right:0;pointer-events:none;z-index:0}
+  .hbg svg{width:100%;display:block}
+
+  /* ── TOPBAR ── */
+  .topbar{display:flex;align-items:center;gap:10px;padding:14px 18px;position:relative;z-index:2;flex-shrink:0}
+  .topbar.white .ttl,.topbar.white .tback{color:#fff}
+  .tback{background:rgba(255,255,255,.88);border:none;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;color:var(--green-d);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.1);flex-shrink:0}
+  .ttl{font-size:16px;font-weight:700;color:var(--ink)}
+  .tuser{margin-left:auto;font-size:12px;background:rgba(255,255,255,.88);padding:4px 12px;border-radius:20px;color:var(--green-d);font-weight:600;cursor:pointer}
+
+  /* ── AUTH PAGE ── */
+  .auth-wrap{padding:32px 22px;position:relative;z-index:1;flex:1;display:flex;flex-direction:column;justify-content:center;gap:0}
+  .brand{text-align:center;margin-bottom:22px}
+  .brand-ico{font-size:48px}
+  .brand-name{font-size:34px;font-weight:900;color:var(--green-d);letter-spacing:-1.5px;margin-top:4px}
+  .brand-name .ac{color:var(--teal)}
+  .brand-tag{font-size:12px;color:var(--sub);margin-top:5px}
+  .acard{background:var(--sf);border-radius:22px;padding:22px;box-shadow:0 12px 40px rgba(27,67,50,.14)}
+  .atabs{display:flex;gap:5px;background:var(--sf1);padding:4px;border-radius:12px;margin-bottom:16px}
+  .atab{flex:1;padding:9px;border:none;background:transparent;border-radius:9px;font-size:14px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .2s}
+  .atab.on{background:var(--teal);color:#fff}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;letter-spacing:.3px}
+  .field input{width:100%;height:44px;padding:0 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);outline:none;background:var(--sf1);transition:border .2s}
+  .field input:focus{border-color:var(--teal);background:#fff}
+  .auth-err{font-size:12px;color:var(--red);background:#fee2e2;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
+  .abtn{width:100%;height:48px;border:none;border-radius:12px;background:var(--teal);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;box-shadow:0 6px 18px rgba(29,158,117,.3);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .abtn:disabled{opacity:.6;cursor:not-allowed}
+  .asep{text-align:center;font-size:12px;color:var(--mute);margin:14px 0}
+  .asocial{display:flex;gap:8px}
+  .asocial button{flex:1;height:42px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+
+  /* ── HOME PAGE ── */
+  .hhero{padding:18px 20px 14px;position:relative;z-index:1;color:#fff}
+  .hgreet{font-size:13px;opacity:.9}
+  .htitle{font-size:26px;font-weight:900;margin-top:3px;letter-spacing:-.5px}
+  .hsub{font-size:12px;opacity:.9;margin-top:5px;line-height:1.5}
+  .ucards{padding:8px 18px 100px;display:flex;flex-direction:column;gap:13px;position:relative;z-index:1}
+  .ucard{background:var(--sf);border-radius:18px;padding:17px 18px;cursor:pointer;box-shadow:0 5px 18px rgba(27,67,50,.09);border:1.5px solid transparent;transition:all .18s;display:flex;align-items:center;gap:14px}
+  .ucard:active{transform:scale(.98)}
+  .ucard:hover{border-color:var(--teal-s);box-shadow:0 10px 26px rgba(29,158,117,.16)}
+  .uico{width:54px;height:54px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+  .ic1{background:var(--green-p)} .ic2{background:var(--teal-p)} .ic3{background:#FFF3E0} .ic4{background:#EDE9FE}
+  .ubody{flex:1}
+  .unum{font-size:10px;font-weight:700;color:var(--teal);letter-spacing:.8px}
+  .uname{font-size:17px;font-weight:800;color:var(--ink);margin-top:2px}
+  .udesc{font-size:12px;color:var(--sub);margin-top:3px;line-height:1.45}
+  .uarr{color:var(--mute);font-size:22px}
+
+  /* ── STEP PAGES ── */
+  .scrl{padding:8px 18px 100px;position:relative;z-index:1;overflow-y:auto}
+  .sec{background:var(--sf);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(27,67,50,.05)}
+  .sec-t{font-size:14px;font-weight:800;color:var(--green-d);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+  .sec-sub{font-size:12px;color:var(--mute);font-weight:400;margin-left:4px}
+
+  /* 지역 선택 2단계 */
+  .sido-list{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+  .sido-btn{padding:7px 13px;border-radius:99px;border:1.5px solid var(--line);background:var(--sf1);font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
+  .sido-btn.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .sigun-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;max-height:200px;overflow-y:auto;padding:2px}
+  .sigun-btn{border:1.5px solid var(--line);background:var(--sf1);border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--sub);transition:all .15s}
+  .sigun-btn.on{border-color:var(--teal);background:var(--teal-p);color:var(--green-d)}
+  .sigun-empty{font-size:13px;color:var(--mute);text-align:center;padding:20px 0}
+
+  /* 작물 + 품종 + 방식 */
+  .crop-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
+  .crop-btn{flex-shrink:0;border:1.5px solid var(--line);background:var(--sf1);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:center;transition:all .15s;min-width:72px}
+  .crop-btn .ce{font-size:26px;display:block}
+  .crop-btn .cn{font-size:12px;font-weight:700;color:var(--sub);margin-top:5px}
+  .crop-btn.on{border-color:var(--teal);background:var(--teal-p)}
+  .crop-btn.on .cn{color:var(--green-d)}
+  .variety-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:12px}
+  .variety-btn{border:1.5px solid var(--line);background:var(--sf1);border-radius:9px;padding:9px 6px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--sub);transition:all .15s;line-height:1.3}
+  .variety-btn.on{border-color:var(--teal);background:var(--teal-p);color:var(--green-d)}
+  .method-row{display:flex;gap:8px}
+  .method-btn{flex:1;border:1.5px solid var(--line);background:var(--sf1);border-radius:10px;padding:11px;cursor:pointer;text-align:center;transition:all .15s}
+  .method-btn .mico{font-size:20px;display:block}
+  .method-btn .mlb{font-size:12px;font-weight:700;color:var(--sub);margin-top:4px}
+  .method-btn.on{border-color:var(--teal);background:var(--teal-p)}
+  .method-btn.on .mlb{color:var(--green-d)}
+
+  .cta{width:100%;height:52px;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;transition:all .2s;margin-top:4px}
+  .cta:enabled{background:var(--teal);color:#fff;box-shadow:0 6px 18px rgba(29,158,117,.32)}
+  .cta:disabled{background:var(--line);color:var(--mute);cursor:not-allowed}
+
+  /* ── LOADING ── */
+  .loading{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center}
+  .lemoji{font-size:52px;margin-bottom:14px}
+  .lmsg{font-size:14px;color:var(--sub);margin-bottom:20px}
+  .prog{height:7px;background:var(--line);border-radius:4px;overflow:hidden;width:80%;margin:0 auto 10px}
+  .pfill{height:100%;background:var(--teal);border-radius:4px;transition:width .5s}
+  .ppct{font-size:22px;font-weight:800;color:var(--teal)}
+
+  /* ── RESULT ── */
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .kpi{background:var(--sf);border-radius:13px;padding:14px;box-shadow:0 2px 10px rgba(27,67,50,.05)}
+  .klb{font-size:10px;color:var(--mute);margin-bottom:4px}
+  .kval{font-size:25px;font-weight:900}
+  .ksub{font-size:11px;margin-top:3px;font-weight:700}
+  .card{background:var(--sf);border-radius:16px;overflow:hidden;margin-bottom:14px;box-shadow:0 2px 12px rgba(27,67,50,.05)}
+  .card-h{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .card-t{font-size:13px;font-weight:800;color:var(--green-d)}
+  .badge{font-size:11px;padding:2px 9px;border-radius:99px;font-weight:700}
+  .bml{background:#ede9fe;color:#5b21b6} .bred{background:#fee2e2;color:#b91c1c}
+  .verdict{padding:15px;font-size:14px;line-height:1.7;color:var(--ink)}
+  .hi{color:var(--teal);font-weight:800} .lo{color:var(--red);font-weight:800}
+  .chart-wrap{position:relative;width:100%}
+  .leg{display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:var(--mute);padding:0 14px 8px}
+  .lsq{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+  .seg{display:flex;align-items:center;gap:10px;padding:10px 15px;border-bottom:1px solid var(--line)}
+  .seg:last-child{border-bottom:none}
+  .slb{font-size:12px;color:var(--sub);width:64px;flex-shrink:0}
+  .sbg{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+  .sfill{height:100%;border-radius:3px}
+  .sv{font-size:12px;font-weight:700;width:32px;text-align:right}
+  .riskrow{display:flex;gap:11px;align-items:flex-start;padding:11px 15px;border-bottom:1px solid var(--line)}
+  .riskrow:last-child{border-bottom:none}
+  .rico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px}
+  .rid{background:#fee2e2} .riw{background:#fef3c7} .ris{background:#dcfce7}
+  .rmain{font-size:13px;font-weight:700} .rd{color:#b91c1c} .rw{color:#92400e} .rs{color:#15803d}
+  .rsub{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.45}
+  .ract{font-size:11px;color:var(--blue);margin-top:3px;font-weight:700}
+  .chkrow{display:flex;gap:11px;align-items:flex-start;padding:11px 15px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .1s}
+  .chkrow:last-child{border-bottom:none}
+  .chkrow:active{background:var(--sf1)}
+  .chkbox{width:20px;height:20px;border-radius:6px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;transition:all .15s}
+  .chkbox.on{background:var(--green-s);border-color:var(--green-s);color:#fff}
+  .chtxt{font-size:13px;line-height:1.4} .chwhen{font-size:11px;color:var(--mute);margin-top:2px}
+  .aireport{padding:15px;font-size:13px;line-height:1.8;color:var(--ink)}
+
+  /* 비교 결과 */
+  .rankrow{display:flex;align-items:center;gap:11px;padding:13px 15px;border-bottom:1px solid var(--line)}
+  .rankrow:last-child{border-bottom:none}
+  .rnum{width:26px;height:26px;border-radius:50%;background:var(--teal-p);color:var(--teal-d);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .rankrow.top .rnum{background:var(--teal);color:#fff}
+  .rnbody{flex:1}
+  .rnname{font-size:15px;font-weight:800} .rnvar{font-size:11px;color:var(--mute);margin-top:1px}
+  .rbar{height:5px;background:var(--line);border-radius:3px;margin-top:5px;overflow:hidden}
+  .rbarfill{height:100%;border-radius:3px}
+  .rsc{font-size:16px;font-weight:900}
+
+  /* 챗봇 */
+  .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;max-width:444px;width:calc(100% - 36px);height:52px;border-radius:16px;background:var(--green-d);color:#fff;border:none;font-size:14px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 24px rgba(27,67,50,.4);z-index:200}
+  .fab.show{display:flex}
+  .fab:active{transform:translateX(-50%) scale(.97)}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:300;opacity:0;pointer-events:none;transition:opacity .25s}
+  .overlay.on{opacity:1;pointer-events:auto}
+  .csheet{position:fixed;left:50%;transform:translate(-50%,100%);bottom:0;max-width:480px;width:100%;height:82vh;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -6px 30px rgba(0,0,0,.18);z-index:310;display:flex;flex-direction:column;transition:transform .3s ease}
+  .csheet.on{transform:translate(-50%,0)}
+  .chead{padding:15px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+  .cname{font-size:15px;font-weight:800;color:var(--green-d)}
+  .cctx{font-size:12px;color:var(--mute);margin-top:2px}
+  .ccls{background:none;border:none;font-size:26px;color:var(--mute);cursor:pointer;line-height:1}
+  .cmsgs{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:11px}
+  .cmsg{max-width:85%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.6}
+  .cb{align-self:flex-start;background:var(--sf1);border:1px solid var(--line);color:var(--ink);border-bottom-left-radius:4px}
+  .cu{align-self:flex-end;background:var(--teal);color:#fff;border-bottom-right-radius:4px}
+  .cchips{display:flex;flex-wrap:wrap;gap:7px;padding:0 16px 11px;flex-shrink:0}
+  .cchip{padding:7px 13px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-size:12px;color:var(--sub);cursor:pointer;white-space:nowrap}
+  .cchip:hover{background:var(--teal-p);border-color:var(--teal);color:var(--green-d)}
+  .cinrow{padding:11px 15px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-shrink:0}
+  .cin{flex:1;height:41px;padding:0 13px;border:1.5px solid var(--line);border-radius:21px;font-size:14px;background:var(--sf1);outline:none}
+  .cin:focus{border-color:var(--teal)}
+  .csend{width:41px;height:41px;border-radius:50%;background:var(--teal);color:#fff;border:none;cursor:pointer;font-size:18px;flex-shrink:0}
+  .ctyping{display:flex;gap:4px;padding:12px 13px;align-self:flex-start}
+  .ctyping span{width:7px;height:7px;border-radius:50%;background:#ccc;animation:ct 1.2s infinite}
+  .ctyping span:nth-child(2){animation-delay:.2s} .ctyping span:nth-child(3){animation-delay:.4s}
+  @keyframes ct{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--teal);border-radius:50%;animation:spin 1s linear infinite;display:inline-block}
+
+  /* profile dropdown */
+  .pmenu{position:absolute;right:18px;top:56px;background:#fff;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.15);z-index:50;min-width:160px;overflow:hidden;display:none}
+  .pmenu.on{display:block}
+  .pmenu-item{padding:12px 16px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--line)}
+  .pmenu-item:last-child{border-bottom:none;color:var(--red)}
+  .pmenu-item:hover{background:var(--sf1)}
+
+  /* toast */
+  .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--green-d);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ══════ PAGE: AUTH ══════ -->
+  <div class="page on" id="pAuth" style="background:#eaf5ef">
+    <div class="hbg">
+      <svg viewBox="0 0 480 360" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8ecde0"/><stop offset="100%" stop-color="#c8e9e5"/></linearGradient>
+          <linearGradient id="ggrass" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7dbf7e"/><stop offset="100%" stop-color="#4e9658"/></linearGradient>
+        </defs>
+        <rect width="480" height="360" fill="url(#gsky)"/>
+        <circle cx="370" cy="72" r="42" fill="#fef3c7" opacity=".85"/>
+        <path d="M0 240 Q120 210 240 235 T480 225 V360 H0Z" fill="url(#ggrass)" opacity=".9"/>
+        <path d="M0 295 Q140 265 280 290 T480 280 V360 H0Z" fill="#3d8052" opacity=".85"/>
+        <g opacity=".55" stroke="#3d8052" stroke-width="1.5" stroke-linecap="round">
+          <line x1="50" y1="360" x2="115" y2="265"/><line x1="155" y1="360" x2="205" y2="270"/>
+          <line x1="280" y1="360" x2="315" y2="265"/><line x1="390" y1="360" x2="415" y2="270"/>
+        </g>
+      </svg>
+    </div>
+    <div class="auth-wrap">
+      <div class="brand">
+        <div class="brand-ico">🌱</div>
+        <div class="brand-name">Farm<span class="ac">Fit</span></div>
+        <div class="brand-tag">내 땅과 날씨에 맞는 맞춤형 재배 가이드</div>
+      </div>
+      <div class="acard">
+        <div class="atabs">
+          <button class="atab on" id="tabLogin" onclick="switchAuth('login')">로그인</button>
+          <button class="atab" id="tabSignup" onclick="switchAuth('signup')">회원가입</button>
+        </div>
+        <div id="fnickname" class="field" style="display:none"><label>닉네임 (농장 이름)</label><input id="inick" type="text" placeholder="예: 고창 황토밭"></div>
+        <div class="field"><label>이메일</label><input id="iemail" type="email" placeholder="farmer@example.com"></div>
+        <div class="field"><label>비밀번호</label><input id="ipw" type="password" placeholder="8자 이상"></div>
+        <div class="auth-err" id="authErr"></div>
+        <button class="abtn" id="authBtn" onclick="doAuth()">
+          <span id="authBtnTxt">로그인</span>
+          <span id="authBtnSpin" class="spin" style="display:none"></span>
+        </button>
+        <div class="asep">또는 소셜 계정으로</div>
+        <div class="asocial">
+          <button onclick="showToast('카카오 연동은 Supabase OAuth 설정 후 가능합니다')">🟡 카카오</button>
+          <button onclick="showToast('네이버 연동은 Supabase OAuth 설정 후 가능합니다')">🟢 네이버</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ PAGE: HOME ══════ -->
+  <div class="page" id="pHome">
+    <div class="hbg">
+      <svg viewBox="0 0 480 220" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gsky2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#70bfd8"/><stop offset="100%" stop-color="#b8e0dc"/></linearGradient>
+          <linearGradient id="gg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#68ae6b"/><stop offset="100%" stop-color="#46905a"/></linearGradient>
+        </defs>
+        <rect width="480" height="220" fill="url(#gsky2)"/>
+        <circle cx="395" cy="52" r="32" fill="#fef3c7" opacity=".8"/>
+        <path d="M0 138 Q110 118 230 136 T480 128 V220 H0Z" fill="url(#gg2)"/>
+        <path d="M0 183 Q130 162 285 180 T480 170 V220 H0Z" fill="#3d8052" opacity=".85"/>
+      </svg>
+    </div>
+    <div class="topbar white" style="position:relative;z-index:2">
+      <div style="flex:1"></div>
+      <div class="tuser" id="homeUser" onclick="toggleProfile()">🌱 닉네임</div>
+      <div class="pmenu" id="pmenu">
+        <div class="pmenu-item" onclick="editNickname()">닉네임 변경</div>
+        <div class="pmenu-item" onclick="doLogout()">로그아웃</div>
+      </div>
+    </div>
+    <div class="hhero">
+      <div class="hgreet" id="hgreet">안녕하세요 👋</div>
+      <div class="htitle">무엇을 도와드릴까요?</div>
+      <div class="hsub">용도를 선택하면 단계별로 맞춤 분석을 진행합니다.</div>
+    </div>
+    <div class="ucards">
+      <div class="ucard" onclick="startFlow('before')">
+        <div class="uico ic1">🌱</div>
+        <div class="ubody">
+          <div class="unum">CONTENT 01</div>
+          <div class="uname">심기 전 진단</div>
+          <div class="udesc">지역·작물·품종을 선택해 정식 가능 여부 분석</div>
+        </div>
+        <div class="uarr">›</div>
+      </div>
+      <div class="ucard" onclick="startFlow('manage')">
+        <div class="uico ic2">🌿</div>
+        <div class="ubody">
+          <div class="unum">CONTENT 02</div>
+          <div class="uname">지금 관리</div>
+          <div class="udesc">재배 중인 작물의 지금 상태와 위험 신호 점검</div>
+        </div>
+        <div class="uarr">›</div>
+      </div>
+      <div class="ucard" onclick="startFlow('compare')">
+        <div class="uico ic3">📊</div>
+        <div class="ubody">
+          <div class="unum">CONTENT 03</div>
+          <div class="uname">작물 비교</div>
+          <div class="udesc">내 지역에 여러 작물·품종 적합도 순위 비교</div>
+        </div>
+        <div class="uarr">›</div>
+      </div>
+      <div class="ucard" onclick="goHistory()">
+        <div class="uico ic4">📋</div>
+        <div class="ubody">
+          <div class="unum">CONTENT 04</div>
+          <div class="uname">내 분석 이력</div>
+          <div class="udesc">과거 분석 결과와 권고 사항 다시 보기</div>
+        </div>
+        <div class="uarr">›</div>
+      </div>
+      <div class="card" id="homeStatsCard" style="display:none">
+        <div class="card-h"><span class="card-t">📊 내 분석 요약</span></div>
+        <div id="homeStatsBody" style="padding:15px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ PAGE: INPUT ══════ -->
+  <div class="page" id="pInput">
+    <div class="topbar">
+      <button class="tback" onclick="goPage('pHome')">‹</button>
+      <div class="ttl" id="inputTitle">심기 전 진단</div>
+    </div>
+    <div class="scrl">
+      <!-- STEP 1: 시/도 → 시군구 -->
+      <div class="sec">
+        <div class="sec-t">📍 재배 지역 선택 <span class="sec-sub">시/도 → 시군구 2단계</span></div>
+        <div class="sido-list" id="SidoList"></div>
+        <div id="SigunWrap" style="display:none">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px" id="SigunTitle"></div>
+          <div class="sigun-grid" id="SigunGrid"></div>
+        </div>
+      </div>
+      <!-- STEP 2: 작물 → 품종 → 방식 -->
+      <div class="sec">
+        <div class="sec-t">🌾 작물 · 품종 · 재배방식</div>
+        <div class="sec-t" style="font-size:12px;font-weight:600;color:var(--mute);margin-top:-8px;margin-bottom:10px">① 작물 선택</div>
+        <div class="crop-row" id="cropRow"></div>
+        <div id="varietyWrap" style="display:none">
+          <div class="sec-t" style="font-size:12px;font-weight:600;color:var(--mute);margin-bottom:8px">② 품종 선택 <span style="font-weight:400">(기록용 — 적합도 점수에는 영향 없음)</span></div>
+          <div class="variety-grid" id="varietyGrid"></div>
+        </div>
+        <div id="methodWrap" style="display:none">
+          <div class="sec-t" style="font-size:12px;font-weight:600;color:var(--mute);margin-bottom:8px">③ 재배방식</div>
+          <div class="method-row" id="methodRow"></div>
+        </div>
+      </div>
+      <button class="cta" id="inputCta" onclick="runAnalysis()" disabled>위 내용을 선택해주세요</button>
+    </div>
+  </div>
+
+  <!-- ══════ PAGE: COMPARE INPUT ══════ -->
+  <div class="page" id="pCompare">
+    <div class="topbar">
+      <button class="tback" onclick="goPage('pHome')">‹</button>
+      <div class="ttl">작물 비교</div>
+    </div>
+    <div class="scrl">
+      <div class="sec">
+        <div class="sec-t">📍 재배 지역</div>
+        <div class="sido-list" id="cSidoList"></div>
+        <div id="cSigunWrap" style="display:none">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px" id="cSigunTitle"></div>
+          <div class="sigun-grid" id="cSigunGrid"></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">🌾 비교할 작물 선택 <span class="sec-sub">2개 이상</span></div>
+        <div class="crop-row" id="cCropRow"></div>
+        <div style="font-size:12px;color:var(--mute);text-align:center;margin-top:6px">품종별 비교는 결과 화면에서 볼 수 있어요</div>
+      </div>
+      <button class="cta" id="compareCta" onclick="runCompare()" disabled>작물을 2개 이상 선택하세요</button>
+    </div>
+  </div>
+
+  <!-- ══════ PAGE: LOADING ══════ -->
+  <div class="page" id="pLoading">
+    <div class="loading">
+      <div class="lemoji" id="lEmoji">🌤</div>
+      <div class="lmsg" id="lMsg">기상 조건 분석 중...</div>
+      <div class="prog"><div class="pfill" id="pFill" style="width:0%"></div></div>
+      <div class="ppct" id="pPct">0%</div>
+    </div>
+  </div>
+
+  <!-- ══════ PAGE: RESULT ══════ -->
+  <div class="page" id="pResult">
+    <div class="topbar">
+      <button class="tback" onclick="goPage('pHome')">‹</button>
+      <div class="ttl" id="rTitle">분석 결과</div>
+    </div>
+    <div class="scrl" id="rContent"></div>
+    <div style="height:80px"></div>
+  </div>
+
+  <!-- ══════ PAGE: COMPARE RESULT ══════ -->
+  <div class="page" id="pCmpResult">
+    <div class="topbar">
+      <button class="tback" onclick="goPage('pHome')">‹</button>
+      <div class="ttl">작물 비교 결과</div>
+    </div>
+    <div class="scrl" id="cmpContent"></div>
+    <div style="height:80px"></div>
+  </div>
+
+  <!-- ══════ PAGE: HISTORY ══════ -->
+  <div class="page" id="pHistory">
+    <div class="topbar">
+      <button class="tback" onclick="goPage('pHome')">‹</button>
+      <div class="ttl">내 분석 이력</div>
+    </div>
+    <div class="scrl">
+      <div class="card" id="histChartWrap" style="display:none">
+        <div class="card-h"><span class="card-t">📈 적합도 점수 추이</span></div>
+        <div style="padding:12px 12px 8px"><div class="chart-wrap" style="height:160px"><canvas id="histChart"></canvas></div></div>
+      </div>
+      <div class="card"><div class="card-h"><span class="card-t">🕓 최근 분석</span></div><div id="histBox"></div></div>
+    </div>
+    <div style="height:80px"></div>
+  </div>
+
+</div>
+
+<!-- CHATBOT -->
+<button class="fab" id="fab" onclick="openChat()">💬 분석에 대해 물어보기</button>
+<div class="overlay" id="overlay" onclick="closeChat()"></div>
+<div class="csheet" id="csheet">
+  <div class="chead">
+    <div><div class="cname">🌱 FarmFit 도우미</div><div class="cctx" id="cCtx">분석 결과를 알고 있어요</div></div>
+    <button class="ccls" onclick="closeChat()" aria-label="닫기">×</button>
+  </div>
+  <div class="cmsgs" id="cMsgs"></div>
+  <div class="cchips" id="cChips"></div>
+  <div class="cinrow">
+    <input class="cin" id="cIn" placeholder="궁금한 점 입력..." onkeydown="if(event.key==='Enter')sendChat(this.value)">
+    <button class="csend" onclick="sendChat(document.getElementById('cIn').value)" aria-label="전송">↑</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="data.js"></script>
+<script src="scoring.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
