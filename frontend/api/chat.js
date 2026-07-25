@@ -34,7 +34,10 @@ module.exports = async (req, res) => {
   const body = {
     system_instruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { maxOutputTokens: 400 },
+    // maxOutputTokens 400은 한국어 기준으로 조금만 길어져도 답변이 중간에 잘렸다 —
+    // 질문 성격에 따라 유연하게 답하도록 여유를 늘림. temperature도 살짝 올려 매번
+    // 판박이 같은 문장 대신 자연스러운 표현이 나오게 함(단, 근거 데이터는 그대로 고정).
+    generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
   };
 
   // 에이전트형 챗봇: 모델이 필요하면 재계산 도구를 직접 호출하게 한다.

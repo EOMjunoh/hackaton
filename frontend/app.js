@@ -273,7 +273,12 @@ function buildVarietyUI(){
   const grid=document.getElementById('varietyGrid');
   if(!selCropId){wrap.style.display='none';return;}
   wrap.style.display='block';
-  const vars=CROPS[selCropId].varieties;
+  const crop=CROPS[selCropId];
+  const vars=crop.varieties;
+  // 조사로 확인된 작물(배·감자·사과)만 품종별 수확시기(GDD) 차이가 점수에 반영됨 —
+  // 나머지(오이·상추)는 신뢰할 자료를 못 찾아 품종이 점수에 영향을 주지 않음.
+  document.getElementById('varietyNote').textContent = crop.varietyGddMult
+    ? '(수확시기 차이가 점수에 반영돼요)' : '(기록용 — 적합도 점수에는 영향 없음)';
   grid.innerHTML=vars.map(v=>
     `<button class="variety-btn${selVariety===v?' on':''}" data-v="${v}">${v}</button>`
   ).join('');
@@ -490,7 +495,7 @@ async function runAnalysis(){
   goPage('pResult');
 
   // 챗봇 컨텍스트
-  analysisCtx={cropId:selCropId,region:selSigun,crop:crop.name,variety:selVariety,method:selMethod,score:score.total,grade:g.label,mlPred4w:ml.pred[4],yield:ml.predictedYield,yieldDelta:dp,avg:((env.mx+env.mn)/2).toFixed(1),tmin:env.mn,tmax:env.mx,ph:env.ph,ec:env.ec,om:env.om,rain:env.rain,hasSoil:score.hasSoil,nowcast:nowcast,frostDays:env.fc.filter(d=>d.mn<=CROPS[selCropId].th.frost).length,thPh:`${CROPS[selCropId].th.ph.opt_min}~${CROPS[selCropId].th.ph.opt_max}`,risks:risks.map(r=>`[${r.lv}]${r.title}:${r.sub}`).join(' / '),dataSource:dataNote};
+  analysisCtx={cropId:selCropId,region:selSigun,crop:crop.name,variety:selVariety,method:selMethod,score:score.total,grade:g.label,mlPred4w:ml.pred[4],yield:ml.predictedYield,yieldDelta:dp,avg:((env.mx+env.mn)/2).toFixed(1),tmin:env.mn,tmax:env.mx,ph:env.ph,ec:env.ec,om:env.om,rain:env.rain,hasSoil:score.hasSoil,hasVarietyEffect:!!crop.varietyGddMult,nowcast:nowcast,frostDays:env.fc.filter(d=>d.mn<=CROPS[selCropId].th.frost).length,thPh:`${CROPS[selCropId].th.ph.opt_min}~${CROPS[selCropId].th.ph.opt_max}`,risks:risks.map(r=>`[${r.lv}]${r.title}:${r.sub}`).join(' / '),dataSource:dataNote};
   chatHist=[];
   document.getElementById('cCtx').textContent=`${selSigun} · ${crop.name}(${selVariety}) ${selMethod} 결과를 알고 있어요`;
   resetChat();
@@ -633,7 +638,8 @@ async function sendChat(text){
 }
 
 // 챗봇이 직접 호출할 수 있는 도구 — 클라이언트에서 실제 스코어링 엔진으로 재계산
-// (품종은 점수에 영향을 주지 않으므로 recalc_variety는 두지 않음 — 지역만 재계산)
+// (recalc_variety는 두지 않음 — 사용자가 이미 자기 품종을 알고 선택했으므로 "다른
+// 품종이면?" 재계산 수요가 없고, 지역 재계산만 실제로 쓰인다)
 const TOOLS_CLIENT={
   async recalc_region(args){
     const cid=analysisCtx.cropId;
@@ -662,9 +668,19 @@ async function fetchChatAns(msg){
 적합도:${c.score}점(${c.grade}) ML4주후:${c.mlPred4w}점 수확량:${c.yield}kg(${c.yieldDelta>0?'+':''}${c.yieldDelta}%)
 기온(예보 평균):${c.avg}°C${nowLine} ${soilLine} 야간저온:${c.frostDays}일
 위험:${c.risks}
-규칙:쉬운 말, 행동 중심, 3~4문장, 데이터 없으면 농업기술센터 상담 안내.
-품종은 기록용일 뿐 적합도 점수에 영향을 주지 않습니다 — "이 품종이 더 낫냐"는 질문에는
-추측하지 말고 품종은 점수에 반영되지 않는다고 정확히 답하세요.
+
+답변 스타일:
+- 쉬운 말, 행동 중심으로 답하되 문장 수를 억지로 맞추지 마세요. 단순한 질문(예/아니오,
+  숫자 확인)은 1~2문장으로 짧게, "왜 이 점수가 나왔는지" "지금 뭘 해야 하는지"처럼
+  설명이 필요한 질문은 필요한 만큼 충분히(항목을 나눠 설명해도 됨) 답하세요.
+- 이 데이터로 답할 수 없는 질문(예: 병충해 진단, 농약 처방)은 모른다고 인정하고
+  농업기술센터·전문가 상담을 안내하세요. 지어내서 답하지 마세요.
+- 사용자가 인사만 하거나 잡담을 걸면 자연스럽게 받아주고, 이 분석에 대해 뭘 도와줄 수
+  있는지 짧게 안내하세요.
+
+${c.hasVarietyEffect
+  ? `이 작물은 품종별 수확 시기(조생/중생/만생) 차이가 실제로 확인돼 점수에 반영돼 있습니다 — "품종이 점수에 영향을 주냐"는 질문에는 그렇다고 답하고, 정확한 수치 근거(예: pH나 EC 같은 구체적 수치)가 없는 부분은 추측하지 마세요.`
+  : `이 작물은 품종별 재배 적합도 차이를 뒷받침할 신뢰할 만한 자료를 찾지 못해 품종은 기록용일 뿐 점수에 반영하지 않습니다 — "이 품종이 더 낫냐"는 질문에는 추측하지 말고 그렇게 정확히 답하세요.`}
 사용자가 "다른 지역이면?"처럼 실제 재계산이 필요한 질문을 하면 추측하지 말고
 recalc_region 도구를 호출해 실제 점수를 받아온 뒤 답하세요.`;
 
@@ -689,13 +705,24 @@ function fallbackAns(msg){
   if(msg.includes('점수')||msg.includes('산도')||msg.includes('pH')){
     if(!c.hasSoil) return `${c.crop}(${c.variety}) 적합도 ${c.score}점은 이 지역의 농촌진흥청 토양 실측 데이터가 아직 없어 기온·강수 조건만으로 계산됐어요. 정확한 산도(pH) 진단은 농업기술센터에 토양검정을 의뢰해보세요.`;
     if(c.ph<6.0) return `${c.crop}(${c.variety}) 적합도 ${c.score}점의 주요 원인은 토양 산도(pH ${c.ph})입니다. 적정(pH ${c.thPh})보다 산성이라 뿌리가 영양을 흡수하기 어렵습니다. 석회 200~300kg/10a를 정식 2~3주 전에 뿌리면 개선됩니다.`;
-    return `현재 ${c.score}점은 기온·토양산도·염분·강수를 종합한 결과예요. 품종(${c.variety})은 기록용일 뿐 점수에는 반영되지 않고, ${c.method} 재배방식만 점수·수확량에 영향을 줍니다.`;
+    const varietyNote=c.hasVarietyEffect?`품종(${c.variety})도 수확 시기 차이 때문에 점수에 일부 반영됐어요.`:`품종(${c.variety})은 기록용일 뿐 점수에는 반영되지 않고요.`;
+    return `현재 ${c.score}점은 기온·토양산도·염분·강수를 종합한 결과예요. ${varietyNote} ${c.method} 재배방식도 점수·수확량에 영향을 줍니다.`;
   }
-  if(msg.includes('품종')) return `품종(${c.variety})은 현재 기록 목적으로만 남겨두고 있어서 적합도 점수에는 영향을 주지 않아요. 대신 ${c.method} 재배 시 ${c.frostDays>0?'야간 저온 관리':'일조량 확보'}에 신경 쓰시면 됩니다.`;
+  if(msg.includes('품종')) return c.hasVarietyEffect
+    ? `품종(${c.variety})은 수확 시기(조생/중생/만생)에 따라 필요한 누적 온도가 달라서 적합도 점수에 일부 반영돼요. 다만 정확한 항목별 수치까지는 알려드리기 어려워요.`
+    : `품종(${c.variety})은 현재 기록 목적으로만 남겨두고 있어서 적합도 점수에는 영향을 주지 않아요. 대신 ${c.method} 재배 시 ${c.frostDays>0?'야간 저온 관리':'일조량 확보'}에 신경 쓰시면 됩니다.`;
   if(msg.includes('심')||msg.includes('정식')||msg.includes('언제')){
     if(c.frostDays>=3) return `앞으로 ${c.frostDays}일 야간 저온이 예보돼 정식을 2주 미루는 게 좋아요. ${c.method==='시설'?'하우스라면 내부 온도를 유지하면 진행 가능합니다.':''}ML 예측상 ${c.mlPred4w}점으로 오르면 그때가 적기입니다.`;
     return `현재 기온 조건은 정식에 무리가 없어요. 토양 준비를 마쳤다면 이번 주 진행해도 좋습니다.`;
   }
-  if(msg.includes('수확')) return `ML 예측 기준 ${c.yield.toLocaleString()}kg/10a(표준 대비 ${c.yieldDelta>0?'+':''}${c.yieldDelta}%)입니다. ${c.method} 재배방식을 고려한 값이고, 품종은 이 수치에 반영되지 않습니다.`;
-  return `${c.region} · ${c.crop}(${c.variety}) ${c.method} 분석 기준으로 답할 수 있어요. 더 구체적인 질문을 해주시면 정확히 안내드립니다.`;
+  if(msg.includes('수확')) return `ML 예측 기준 ${c.yield.toLocaleString()}kg/10a(표준 대비 ${c.yieldDelta>0?'+':''}${c.yieldDelta}%)입니다. ${c.method} 재배방식${c.hasVarietyEffect?'과 품종의 수확시기 차이':''}를 고려한 값입니다.`;
+  if(msg.includes('날씨')||msg.includes('기온')||msg.includes('온도')||msg.includes('비')||msg.includes('강수')){
+    const nowPart=c.nowcast?` 지금 실황은 ${c.nowcast.temp}°C${c.nowcast.rain1h>0?`, 최근 1시간 강수 ${c.nowcast.rain1h}mm`:''}예요.`:'';
+    return `기상청 단기예보 기준 평균 기온은 ${c.avg}°C(최저 ${c.tmin}°C~최고 ${c.tmax}°C)이고, 야간 저온이 ${c.frostDays}일 예보돼 있어요.${nowPart}`;
+  }
+  if(msg.includes('위험')||msg.includes('걱정')||msg.includes('괜찮')){
+    return `현재 감지된 신호는 — ${c.risks} — 이렇습니다. 급한 항목(🚨)이 있으면 오늘 안에 조치하시고, 애매하면 농업기술센터에 확인해보세요.`;
+  }
+  if(/^(안녕|하이|헬로|ㅎㅇ)/.test(msg.trim())) return `안녕하세요! ${c.region} · ${c.crop}(${c.variety}) ${c.method} 분석 결과 보고 계세요. 점수 이유, 지금 할 일, 다른 지역과 비교 등 뭐든 물어보세요.`;
+  return `${c.region} · ${c.crop}(${c.variety}) ${c.method} 분석 기준으로 답할 수 있어요 — 점수, 토양, 날씨, 위험 신호, 수확량, 정식 시기 중 궁금한 걸 구체적으로 물어봐 주시면 더 정확히 안내할게요.`;
 }

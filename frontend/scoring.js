@@ -32,10 +32,16 @@
   // 토양 실측값(ph/ec)이 없는 지역에서는 그 두 항목을 점수 계산에서 아예 빼고,
   // 남은 항목(온도·GDD·일교차·강수)의 가중치만으로 다시 정규화합니다 — 없는 데이터를
   // 평균치 등으로 채워 넣지 않고, 실제로 가진 항목만으로 계산한다는 원칙입니다.
+  // 품종별 GDD(누적 온도 요구량) 보정 — 조사로 확인된 작물(배·감자·사과)만 존재하고,
+  // 근거를 못 찾은 작물(오이·상추)이나 품종은 1(보정 없음)이라 점수가 그대로 동일하다.
+  function gddMultOf(cropId,variety){
+    const m=CROPS[cropId].varietyGddMult;
+    return (m&&m[variety])||1;
+  }
   function calcScore(env,cropId,variety,method){
     const c=CROPS[cropId],th=c.th,w=th.w;
     const avg=(env.mx+env.mn)/2;
-    const ts=sVar(avg,th.temp),gs=gdd(avg,th.temp.tbase,180,th.gdd);
+    const ts=sVar(avg,th.temp),gs=gdd(avg,th.temp.tbase,180,th.gdd*gddMultOf(cropId,variety));
     const ds=dts(env.mx,env.mn,th.temp),rs=sVar(env.rain,th.rain);
     const fr=frostRisk(env.fc||[],th.frost);
     const hasSoil=env.ph!=null&&env.ec!=null;

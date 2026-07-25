@@ -109,19 +109,57 @@ test('mlPredict does not assume a ph improvement when soil data is unavailable',
   assert.strictEqual(ml.pred.length, 5); // just needs to run without throwing on env.ph being null
 });
 
-test('variety no longer affects the score (varMods removed)', () => {
-  const cid = 'apple';
-  const scores = CROPS[cid].varieties.map((v) => calcScore(envFull, cid, v, '노지').total);
-  const [first, ...rest] = scores;
-  rest.forEach((s) => assert.strictEqual(s, first, `varieties should score identically, got ${scores}`));
+// 오이·상추는 품종별 재배 적합도 차이를 뒷받침할 신뢰할 만한 자료를 못 찾았으므로
+// (조사 근거는 data.js CROPS.cucumber/lettuce 주석 참고) 품종이 점수에 영향을 주지 않는 게
+// 맞는 결과다 — "구분 자체가 무의미해서 안 만든" 게 아니라 "찾아봤는데 근거가 없어서 안 만든" 것.
+for (const cid of ['cucumber', 'lettuce']) {
+  test(`variety does not affect the score for ${cid} (no credible cultivar-level data found)`, () => {
+    const scores = CROPS[cid].varieties.map((v) => calcScore(envFull, cid, v, '노지').total);
+    const [first, ...rest] = scores;
+    rest.forEach((s) => assert.strictEqual(s, first, `varieties should score identically, got ${scores}`));
+  });
+}
+
+// 배·감자·사과는 조생/중생/만생(수확 시기) 구분이 도농업기술원/국립식량과학원 자료로
+// 확인돼 GDD(누적 온도 요구량) 보정을 반영했다 — 그래서 이 세 작물은 품종에 따라
+// 점수가 실제로, 방향성 있게 달라져야 한다.
+// envFull은 기온이 넉넉해서(avg 19.5°C) GDD 하위 점수가 모든 품종에서 100으로 꽉 차버려
+// 배율 차이가 드러나지 않는다 — 배율 효과를 실제로 확인하려면 GDD가 0~100 사이에서
+// 움직이는(포화되지 않는) 더 서늘한 조건이 필요하다.
+const envModerate = { ...envFull, mx: 16, mn: 10, fc: makeFc([10, 9, 11], [16, 15, 17]) };
+
+test('variety meaningfully affects the score for apple/pear/potato (documented maturity classes)', () => {
+  const cases = [
+    { cid: 'apple', early: '홍로', late: '후지(부사)' },   // 홍로=중생, 후지=만생
+    { cid: 'pear', early: '원황', late: '추황배' },         // 원황=조생, 추황배=만생
+    { cid: 'potato', early: '수미', late: '자영' },         // 수미=조생, 자영=만생
+  ];
+  for (const { cid, early, late } of cases) {
+    const sEarly = calcScore(envModerate, cid, early, '노지');
+    const sLate = calcScore(envModerate, cid, late, '노지');
+    assert.notStrictEqual(sEarly.total, sLate.total, `${cid}: ${early} vs ${late} should differ, both scored ${sEarly.total}`);
+    // 만생종은 더 많은 누적 온도가 필요하므로 GDD 하위 점수는 조생종보다 낮거나 같아야 한다
+    assert.ok(sLate.gs <= sEarly.gs, `${cid}: late-maturing ${late}'s GDD score (${sLate.gs}) should not exceed early ${early}'s (${sEarly.gs})`);
+  }
 });
 
-test('variety no longer affects predicted yield (varMods removed)', () => {
-  const cid = 'apple';
-  const base = calcScore(envFull, cid, '후지(부사)', '노지').total;
-  const yields = CROPS[cid].varieties.map((v) => mlPredict(base, envFull, cid, v, '노지').predictedYield);
-  const [first, ...rest] = yields;
-  rest.forEach((y) => assert.strictEqual(y, first, `predicted yield should be identical across varieties, got ${yields}`));
+test('variety without documented data still scores identically to the crop baseline (no guessing)', () => {
+  // 피크닉(사과)·두백(감자)은 근거를 못 찾아 gddMult=1(보정 없음)로 남겨뒀다
+  const appleBase = calcScore(envFull, 'apple', '홍로', '노지').total; // 홍로도 1.0
+  const applePicnic = calcScore(envFull, 'apple', '피크닉', '노지').total;
+  assert.strictEqual(appleBase, applePicnic);
+  const potatoBase = calcScore(envFull, 'potato', '수미', '노지').total; // 수미도 1.0
+  const potatoDb = calcScore(envFull, 'potato', '두백', '노지').total;
+  assert.strictEqual(potatoBase, potatoDb);
+});
+
+test('variety GDD adjustment also flows into predicted yield for documented crops', () => {
+  const cid = 'pear';
+  const baseEarly = calcScore(envModerate, cid, '원황', '노지').total;
+  const baseLate = calcScore(envModerate, cid, '추황배', '노지').total;
+  const yEarly = mlPredict(baseEarly, envModerate, cid, '원황', '노지').predictedYield;
+  const yLate = mlPredict(baseLate, envModerate, cid, '추황배', '노지').predictedYield;
+  assert.notStrictEqual(yEarly, yLate, 'predicted yield should differ since the underlying score differs');
 });
 
 test('detectRisks and genChecks run without throwing when soil data is missing, and flag the gap honestly', () => {
